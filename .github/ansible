@@ -1,0 +1,73 @@
+
+resource "aws_security_group" "ec2_ssh" {
+  name_prefix = "ec2-ssh"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # allow node exporter agent
+  ingress {
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "ansible_machine" {
+  ami           = "ami-0557a15b87f6559cf"
+  instance_type = "t2.micro"
+  key_name      = "apair"
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    host        = self.public_ip
+    private_key = file("./apair.pem")
+  }
+
+  provisioner "file" {
+    source      = "./node_exporter.service"
+    destination = "/home/ubuntu/node_exporter.service"
+  }
+  provisioner "file" {
+    source      = "./prometheus.yml"
+    destination = "/home/ubuntu/prometheus.yml"
+  }
+  provisioner "remote-exec" {
+  inline = [
+     "sudo apt-add-repository -y ppa:ansible/ansible",
+     "sudo apt-get update",
+     "sudo apt-get install -y ansible"
+    ]
+  }
+  tags = {
+    Name = "ansible-machine"
+  }
+
+  vpc_security_group_ids = [aws_security_group.ec2_ssh.id]
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get install -y wget",
+      "wget https://github.com/prometheus/node_exporter/releases/download/v1.5.0/node_exporter-1.5.0.linux-amd64.tar.gz",
+      "tar -xvf node_exporter-1.5.0.linux-amd64.tar.gz",
+      "sudo cp node_exporter-1.5.0.linux-amd64/node_exporter /usr/local/bin/",
+      "sudo useradd --no-create-home --shell /bin/false node_exporter",
+      "sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter",
+      "sudo cp /home/ubuntu/node_exporter.service /etc/systemd/system/node_exporter.service",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl start node_exporter",
+    ]
+  }
+}
