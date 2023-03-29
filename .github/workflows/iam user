@@ -1,0 +1,29 @@
+resource "aws_iam_user" "lacardia-users" {
+  count = length(var.iamuser)
+  name  = element(var.iamuser, count.index)
+}
+
+resource "aws_iam_user_policy_attachment" "userpasschange" {
+  count      = length(var.iamuser)
+  user       = element(aws_iam_user.lacardia-users.*.name, count.index)
+  policy_arn = aws_iam_policy.userpasschange.arn
+}
+resource "aws_iam_user_policy_attachment" "userenableMFADevice" {
+  count      = length(var.iamuser)
+  user       = element(aws_iam_user.lacardia-users.*.name, count.index)
+  policy_arn = aws_iam_policy.userenableMFADevice.arn
+}
+resource "aws_iam_user_policy_attachment" "userAllowAllEC2Actions" {
+  count      = length(var.iamuser)
+  user       = element(aws_iam_user.lacardia-users.*.name, count.index)
+  policy_arn = aws_iam_policy.userAllowAllEC2Actions.arn
+}
+resource "aws_iam_user_policy_attachment" "userReadOnlyS3Actions" {
+  count      = length(var.iamuser)
+  user       = element(aws_iam_user.lacardia-users.*.name, count.index)
+  policy_arn = aws_iam_policy.userReadOnlyS3Actions.arn
+}
+
+
+
+
