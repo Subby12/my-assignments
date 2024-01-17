@@ -1,0 +1,81 @@
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 4.48.0"
+    }
+  }
+}
+provider "aws" {
+  region = "us-east-1"
+}
+resource "aws_security_group" "grafana_sg" {
+  name        = "grafana_sg"
+  description = "allow grafana traffic"
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+resource "aws_instance" "grafana-server" {
+  ami           = "ami-0557a15b87f6559cf"
+  instance_type = "t2.micro"
+  tags = {
+    Name = "grafana-server"
+  }
+  key_name = "apair"
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    host        = self.public_ip
+    private_key = file("./apair.pem")
+  }
+  provisioner "file" {
+    source      = "./node_exporter.service"
+    destination = "/home/ubuntu/node_exporter.service"
+  }
+  provisioner "file" {
+    source      = "./prometheus.yml"
+    destination = "/home/ubuntu/prometheus.yml"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get install -y apt-transport-https libfontconfig1 software-properties-common wget",
+      "sudo wget -q -O /usr/share/keyrings/grafana.key https://apt.grafana.com/gpg.key",
+      "echo 'deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main' | sudo tee -a /etc/apt/sources.list.d/grafana.list",
+      "sudo apt-get update -y",
+      "sudo apt-get install grafana -y ",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl start grafana-server",
+    ]
+  }
+  # node_exporter provisioner
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get install -y wget",
+      "wget https://github.com/prometheus/node_exporter/releases/download/v1.5.0/node_exporter-1.5.0.linux-amd64.tar.gz",
+      "tar -xvf node_exporter-1.5.0.linux-amd64.tar.gz",
+      "sudo cp node_exporter-1.5.0.linux-amd64/node_exporter /usr/local/bin/",
+      "sudo useradd --no-create-home --shell /bin/false node_exporter",
+      "sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter",
+      "sudo cp /home/ubuntu/node_exporter.service /etc/systemd/system/node_exporter.service",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl start node_exporter",
+    ]
+  }
+}
